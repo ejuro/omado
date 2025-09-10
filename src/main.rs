@@ -1088,11 +1088,14 @@ impl eframe::App for TodoApp {
             }
         });
         
-        // Hot-reload theme less frequently to avoid blocking
+        // Hot-reload theme and todos less frequently to avoid blocking
         if self.last_theme_check.elapsed() > Duration::from_millis(500) {
             let old_bg = self.theme.background;
             self.load_theme();
             let new_bg = self.theme.background;
+            
+            // Also reload todos to pick up CLI changes
+            self.load_todos();
             
             // Force repaint if theme actually changed
             if old_bg != new_bg {
@@ -1368,7 +1371,39 @@ fn main() -> Result<(), eframe::Error> {
         std::process::exit(1);
     }
     
-    // Launch GUI if no CLI command was handled
+    // For GUI mode, detach from terminal by forking (Linux/Unix only)
+    #[cfg(unix)]
+    {
+        unsafe {
+            let pid = libc::fork();
+            if pid > 0 {
+                // Parent process - exit immediately
+                std::process::exit(0);
+            } else if pid == 0 {
+                // Child process - continue with GUI
+                // Create new session to detach from controlling terminal
+                libc::setsid();
+                
+                // Redirect stdin, stdout, stderr to /dev/null
+                let dev_null = std::ffi::CString::new("/dev/null").unwrap();
+                let fd = libc::open(dev_null.as_ptr(), libc::O_RDWR);
+                if fd >= 0 {
+                    libc::dup2(fd, 0); // stdin
+                    libc::dup2(fd, 1); // stdout
+                    libc::dup2(fd, 2); // stderr
+                    if fd > 2 {
+                        libc::close(fd);
+                    }
+                }
+            } else {
+                // Fork failed
+                eprintln!("Failed to fork process");
+                std::process::exit(1);
+            }
+        }
+    }
+    
+    // Launch GUI
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([520.0, 640.0])
