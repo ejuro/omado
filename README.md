@@ -11,7 +11,7 @@ A fast, minimal todo application built specifically for Omarchy. Both GUI and CL
 - **Theme Integration**: Automatically syncs with Alacritty terminal themes
 - **Keyboard-Driven**: Vim-inspired navigation (j/k, dd, etc.)
 - **Fast & Lightweight**: Native Rust performance
-- **Cross-Platform**: Works on Linux, macOS, and Windows
+- **Linux-Native**: Built specifically for Linux and Omarchy
 
 ## Installation
 
@@ -44,8 +44,9 @@ sudo cp target/release/omado /usr/local/bin/
 
 ### Requirements
 
+- **Linux only** (built for Omarchy)
 - Rust 1.70+ (install from [rustup.rs](https://rustup.rs/))
-- Linux: `libxcb`, `libxrandr`, `libxi` development packages
+- Development packages: `libxcb`, `libxrandr`, `libxi`
 
 ## Usage
 
@@ -109,7 +110,7 @@ Tasks can be organized into projects using the `project:` syntax:
 
 Tasks are stored in a plain text file at:
 
-- **Linux/macOS**: `~/.local/share/omado/todo.txt`
+- **Linux**: `~/.local/share/omado/todo.txt` (respects `$XDG_DATA_HOME`)
 
 The format is compatible with standard todo.txt syntax:
 
@@ -162,7 +163,7 @@ cargo test
 - [eframe](https://github.com/emilk/egui/tree/master/crates/eframe) - GUI framework
 - [serde](https://serde.rs/) - Serialization
 - [toml](https://github.com/toml-rs/toml) - TOML parsing for themes
-- [dirs](https://github.com/dirs-dev/dirs-rs) - Cross-platform directories
+- Native XDG directory support (no external deps)
 - [shellexpand](https://github.com/netvl/shellexpand) - Shell path expansion
 - [notify](https://github.com/notify-rs/notify) - File watching
 - [anyhow](https://github.com/dtolnay/anyhow) - Error handling
