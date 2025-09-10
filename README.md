@@ -1,4 +1,4 @@
-# OmaDo
+# omado 
 
 A fast, minimal todo application built specifically for Omarchy. Both GUI and CLI interfaces. Built with Rust and egui, featuring project organization, theme integration, and a clean aesthetic.
 
@@ -60,11 +60,15 @@ When switching away from the workspace where OmaDo is open, Hyprland may show an
 
 #### How to fix it
 
-Add this rule to your Hyprland config (`~/.config/hypr/windows.conf`):
-
+1. Add to the bottom section of `~/.config/hypr/hyprland.conf`:
 ```
-# Keep OmaDo lightly rendering in the background to avoid ANR popups
-windowrulev2 = renderunfocused, title:^OmaDo$
+source = ~/.config/hypr/windows.conf
+```
+
+2. Create `~/.config/hypr/windows.conf` with:
+```
+# Keep omado lightly rendering in the background to avoid ANR popups
+windowrulev2 = renderunfocused, title:^omado$
 ```
 
 ## Usage
@@ -141,40 +145,18 @@ The format is compatible with standard todo.txt syntax:
 
 ### Theme Integration
 
-OmaDo automatically syncs with your Alacritty terminal theme by reading:
+omado automatically syncs with your Alacritty terminal theme by reading:
 
 - **Main config**: `~/.config/alacritty/alacritty.toml`
 - **Imported themes**: Supports Alacritty's `import` feature
 
-Colors update in real-time when you change your terminal theme.
+Colors update automatically when you change your terminal theme (with a short delay).
 
-## Configuration
 
-Currently, OmaDo works out of the box with no configuration required. It automatically:
 
-- Creates the storage directory and file
-- Detects your Alacritty theme
-- Maintains state between GUI and CLI usage
 
-## Development
 
-### Building from Source
 
-```bash
-# Clone the repository
-git clone https://github.com/your-username/omado
-cd omado
-
-# Run in development mode
-cargo run                          # Launch GUI
-cargo run -- add "Test task"      # Test CLI
-
-# Build release version
-cargo build --release
-
-# Run tests (if any are added)
-cargo test
-```
 
 ### Dependencies
 
@@ -182,9 +164,7 @@ cargo test
 - [eframe](https://github.com/emilk/egui/tree/master/crates/eframe) - GUI framework
 - [serde](https://serde.rs/) - Serialization
 - [toml](https://github.com/toml-rs/toml) - TOML parsing for themes
-- Native XDG directory support (no external deps)
 - [shellexpand](https://github.com/netvl/shellexpand) - Shell path expansion
-- [notify](https://github.com/notify-rs/notify) - File watching
 - [anyhow](https://github.com/dtolnay/anyhow) - Error handling
 
 
