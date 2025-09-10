@@ -31,7 +31,7 @@ A fast, minimal todo application built specifically for Omarchy. Both GUI and CL
 
 ```bash
 # Clone and build
-git clone https://github.com/your-username/omado
+git clone https://github.com/ejuro/omado
 cd omado
 cargo build --release
 
@@ -60,12 +60,12 @@ When switching away from the workspace where OmaDo is open, Hyprland may show an
 
 #### How to fix it
 
-1. Add to the bottom section of `~/.config/hypr/hyprland.conf`:
+1. Add to the bottom section of `~/.config/hypr/hyprland.conf` if it is not already there:
 ```
 source = ~/.config/hypr/windows.conf
 ```
 
-2. Create `~/.config/hypr/windows.conf` with:
+2. Create `~/.config/hypr/windows.conf` if it does not already exist, with:
 ```
 # Keep omado lightly rendering in the background to avoid ANR popups
 windowrulev2 = renderunfocused, title:^omado$
