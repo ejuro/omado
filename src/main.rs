@@ -27,6 +27,9 @@ enum KeyAction {
     ToggleSearch,
     CycleProject,
     ClearAllFilters,
+    IncreaseFontSize,
+    DecreaseFontSize,
+    ResetFontSize,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -100,6 +103,18 @@ struct AlacrittyNormal {
 struct AlacrittyConfig {
     colors: Option<AlacrittyColors>,
     general: Option<AlacrittyGeneral>,
+    font: Option<AlacrittyFont>,
+}
+
+#[derive(Deserialize)]
+struct AlacrittyFont {
+    normal: Option<AlacrittyFontFamily>,
+    size: Option<f32>,
+}
+
+#[derive(Deserialize)]
+struct AlacrittyFontFamily {
+    family: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -113,6 +128,8 @@ struct Theme {
     accent: egui::Color32,
     border: egui::Color32,
     done_color: egui::Color32,
+    font_family: Option<String>,
+    font_size: Option<f32>,
 }
 
 impl Default for Theme {
@@ -123,6 +140,8 @@ impl Default for Theme {
             accent: egui::Color32::from_rgb(116, 199, 236),
             border: egui::Color32::from_rgb(88, 91, 112),
             done_color: egui::Color32::from_rgb(166, 173, 200),
+            font_family: None,
+            font_size: None,
         }
     }
 }
@@ -144,6 +163,7 @@ struct TodoApp {
     project_palette_search: String,
     project_palette_selected: usize,
     show_search: bool,
+    user_font_size: Option<f32>,
 }
 
 impl TodoApp {
@@ -168,6 +188,7 @@ impl TodoApp {
             project_palette_search: String::new(),
             project_palette_selected: 0,
             show_search: false,
+            user_font_size: None,
         };
         
         app.load_todos();
@@ -270,6 +291,18 @@ impl TodoApp {
                             if let Ok(color) = Self::parse_hex_color(&black) {
                                 self.theme.done_color = color;
                             }
+                        }
+                    }
+                }
+                
+                // Load font settings
+                if let Some(font) = config.font {
+                    if let Some(size) = font.size {
+                        self.theme.font_size = Some(size);
+                    }
+                    if let Some(normal) = font.normal {
+                        if let Some(family) = normal.family {
+                            self.theme.font_family = Some(family);
                         }
                     }
                 }
@@ -398,11 +431,16 @@ impl TodoApp {
     
     fn get_project_color(&self, project: &str) -> egui::Color32 {
         // Generate variations of theme colors for different projects
+        // Exclude accent color to avoid conflicts with selection highlighting
         let base_colors = [
-            self.theme.accent,
-            self.theme.accent.gamma_multiply(0.8),
             self.theme.foreground.gamma_multiply(0.9),
-            self.theme.border,
+            self.theme.border.gamma_multiply(1.2),
+            self.theme.done_color,
+            egui::Color32::from_rgb(150, 150, 255), // Light blue
+            egui::Color32::from_rgb(255, 150, 150), // Light red  
+            egui::Color32::from_rgb(150, 255, 150), // Light green
+            egui::Color32::from_rgb(255, 255, 150), // Light yellow
+            egui::Color32::from_rgb(255, 150, 255), // Light magenta
         ];
         
         // Create additional variations by adjusting hue and saturation
@@ -630,6 +668,27 @@ impl TodoApp {
                         egui::Key::D => actions.push(KeyAction::DeleteKey),
                         egui::Key::F => actions.push(KeyAction::CycleFilter),
                         egui::Key::C => actions.push(KeyAction::ClearAllFilters),
+                        egui::Key::Plus | egui::Key::Equals => {
+                            if modifiers.ctrl {
+                                actions.push(KeyAction::IncreaseFontSize);
+                            } else {
+                                actions.push(KeyAction::ClearDelete);
+                            }
+                        }
+                        egui::Key::Minus => {
+                            if modifiers.ctrl {
+                                actions.push(KeyAction::DecreaseFontSize);
+                            } else {
+                                actions.push(KeyAction::ClearDelete);
+                            }
+                        }
+                        egui::Key::Num0 => {
+                            if modifiers.ctrl {
+                                actions.push(KeyAction::ResetFontSize);
+                            } else {
+                                actions.push(KeyAction::ClearDelete);
+                            }
+                        }
                         egui::Key::Slash => {}, // Handle search focus separately to avoid conflicts
                         egui::Key::Escape => actions.push(KeyAction::ClearSearch),
                         _ => actions.push(KeyAction::ClearDelete),
@@ -796,7 +855,28 @@ impl TodoApp {
                 self.show_search = false;
                 self.selected = 0;
             }
+            KeyAction::IncreaseFontSize => {
+                let current_size = self.user_font_size
+                    .or(self.theme.font_size)
+                    .unwrap_or(14.0);
+                self.user_font_size = Some((current_size + 1.0).min(24.0));
+            }
+            KeyAction::DecreaseFontSize => {
+                let current_size = self.user_font_size
+                    .or(self.theme.font_size)
+                    .unwrap_or(14.0);
+                self.user_font_size = Some((current_size - 1.0).max(8.0));
+            }
+            KeyAction::ResetFontSize => {
+                self.user_font_size = None;
+            }
         }
+    }
+    
+    fn get_effective_font_size(&self) -> f32 {
+        self.user_font_size
+            .or(self.theme.font_size)
+            .unwrap_or(14.0)
     }
     
     fn render_todo_list(&mut self, ui: &mut egui::Ui) {
@@ -861,10 +941,19 @@ impl TodoApp {
                 ));
             }
             
-            egui::ScrollArea::vertical()
-                .max_height(400.0)
+            let _scroll_area = egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .max_height(ui.available_height() - 100.0) // Leave space for help text
                 .show(ui, |ui| {
                     for (_i, _real_idx, text, project, done, is_selected, is_editing) in todo_data {
+                        
+                        // If this item is selected, scroll to it
+                        if is_selected {
+                            ui.scroll_to_rect(egui::Rect::from_min_size(
+                                ui.cursor().min,
+                                egui::Vec2::new(ui.available_width(), 30.0)
+                            ), Some(egui::Align::Center));
+                        }
                         ui.horizontal(|ui| {
                             let bg_color = if is_selected {
                                 self.theme.accent.gamma_multiply(0.3)
@@ -963,6 +1052,44 @@ impl eframe::App for TodoApp {
         style.visuals.faint_bg_color = self.theme.border;
         style.visuals.override_text_color = Some(self.theme.foreground);
         style.visuals.selection.bg_fill = self.theme.accent;
+        
+        // Apply font configuration from theme
+        if let Some(ref font_family) = self.theme.font_family {
+            let mut fonts = egui::FontDefinitions::default();
+            
+            // Try to load the user's font family
+            if let Ok(font_data) = std::fs::read(format!("/usr/share/fonts/TTF/{}.ttf", font_family))
+                .or_else(|_| std::fs::read(format!("/usr/share/fonts/truetype/{}/{}.ttf", font_family.to_lowercase(), font_family)))
+                .or_else(|_| std::fs::read(format!("/System/Library/Fonts/{}.ttf", font_family)))
+                .or_else(|_| std::fs::read(format!("/System/Library/Fonts/{}.otf", font_family)))
+            {
+                fonts.font_data.insert(
+                    font_family.clone(),
+                    egui::FontData::from_owned(font_data),
+                );
+                fonts.families.entry(egui::FontFamily::Proportional).or_default()
+                    .insert(0, font_family.clone());
+                fonts.families.entry(egui::FontFamily::Monospace).or_default()
+                    .insert(0, font_family.clone());
+                ctx.set_fonts(fonts);
+            }
+        }
+        
+        // Apply font size (use effective font size that considers user override)
+        let font_size = self.get_effective_font_size();
+        style.text_styles.insert(
+            egui::TextStyle::Body,
+            egui::FontId::new(font_size, egui::FontFamily::Proportional),
+        );
+        style.text_styles.insert(
+            egui::TextStyle::Button,
+            egui::FontId::new(font_size, egui::FontFamily::Proportional),
+        );
+        style.text_styles.insert(
+            egui::TextStyle::Small,
+            egui::FontId::new(font_size * 0.8, egui::FontFamily::Proportional),
+        );
+        
         ctx.set_style(style);
         
         egui::CentralPanel::default()
@@ -1034,24 +1161,34 @@ impl eframe::App for TodoApp {
                     
                     ui.separator();
                     
-                    // Help text
+                    // Help text - make it more visible for debugging
+                    ui.separator();
+                    ui.add_space(5.0);
                     ui.horizontal(|ui| {
                         let help_text = if self.editing.is_some() {
                             "Enter: Save | Esc: Cancel"
                         } else {
-                            "j/k: Move | Enter: Edit | a: Add | x: Toggle | dd: Delete | f: Filter | p: Project | Shift+S: Search | Shift+P: Projects | c: Clear Filters"
+                            "j/k: Move | Enter: Edit | a: Add | x: Toggle | dd: Delete | f: Filter | p: Project | Shift+S: Search | Shift+P: Projects | c: Clear Filters | Ctrl+/- : Font Size"
                         };
                         
+                        let help_size = self.get_effective_font_size() * 0.9;
+                        // Make it more prominent temporarily
+                        ui.label(egui::RichText::new("HELP:")
+                            .color(egui::Color32::WHITE)
+                            .size(help_size)
+                            .strong());
                         ui.label(egui::RichText::new(help_text)
-                            .color(self.theme.done_color)
-                            .size(10.0));
+                            .color(self.theme.foreground)
+                            .size(help_size));
                     });
+                    ui.add_space(5.0);
                     
                     if self.delete_mode {
                         ui.horizontal(|ui| {
+                            let delete_size = self.get_effective_font_size() * 0.9;
                             ui.label(egui::RichText::new("Press 'd' again to delete selected item")
                                 .color(egui::Color32::from_rgb(255, 100, 100))
-                                .size(12.0));
+                                .size(delete_size));
                         });
                     }
                 });
@@ -1131,7 +1268,7 @@ fn handle_cli_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Error
             std::process::exit(0);
         }
         "help" | "--help" | "-h" => {
-            println!("OmaDo - Simple todo management");
+            println!("omado - Simple todo management");
             println!();
             println!("USAGE:");
             println!("    omado                    Launch GUI");
@@ -1168,7 +1305,7 @@ fn main() -> Result<(), eframe::Error> {
             .with_inner_size([520.0, 640.0])
             .with_decorations(false)
             .with_resizable(true)
-            .with_title("OmaDo")
+            .with_title("omado")
             .with_app_id("omado"),
         ..Default::default()
     };
