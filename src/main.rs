@@ -83,10 +83,14 @@ struct AlacrittyPrimary {
 #[derive(Deserialize)]
 struct AlacrittyNormal {
     black: Option<String>,
+    #[allow(dead_code)]
     red: Option<String>,
+    #[allow(dead_code)]
     green: Option<String>,
+    #[allow(dead_code)]
     yellow: Option<String>,
     blue: Option<String>,
+    #[allow(dead_code)]
     magenta: Option<String>,
     cyan: Option<String>,
     white: Option<String>,
