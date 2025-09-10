@@ -930,8 +930,8 @@ impl TodoApp {
 
 impl eframe::App for TodoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Hot-reload theme more frequently and force repaints
-        if self.last_theme_check.elapsed() > Duration::from_millis(100) {
+        // Hot-reload theme less frequently to avoid blocking
+        if self.last_theme_check.elapsed() > Duration::from_millis(500) {
             let old_bg = self.theme.background;
             self.load_theme();
             let new_bg = self.theme.background;
@@ -944,8 +944,8 @@ impl eframe::App for TodoApp {
             self.last_theme_check = Instant::now();
         }
         
-        // Ensure continuous repaints for theme checking
-        ctx.request_repaint_after(Duration::from_millis(100));
+        // Less frequent repaints to avoid blocking
+        ctx.request_repaint_after(Duration::from_millis(500));
         
         self.handle_keyboard(ctx);
         
@@ -1168,7 +1168,7 @@ fn main() -> Result<(), eframe::Error> {
             .with_inner_size([520.0, 640.0])
             .with_decorations(false)
             .with_resizable(true)
-            .with_title("omado")
+            .with_title("OmaDo")
             .with_app_id("omado"),
         ..Default::default()
     };

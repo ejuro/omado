@@ -15,21 +15,9 @@ A fast, minimal todo application built specifically for Omarchy. Both GUI and CL
 
 ## Installation
 
-### Option 1: Install from Source (Recommended)
 
-```bash
-# Clone the repository
-git clone https://github.com/your-username/omado
-cd omado
 
-# Install with Cargo
-cargo install --path .
-
-# The binary will be installed to ~/.cargo/bin/omado
-# Make sure ~/.cargo/bin is in your PATH
-```
-
-### Option 2: Build Manually
+### Option 1: Build Manually
 
 ```bash
 # Clone and build
@@ -40,6 +28,8 @@ cargo build --release
 # The binary will be at target/release/omado
 # Copy it to a directory in your PATH, e.g.:
 sudo cp target/release/omado /usr/local/bin/
+
+
 ```
 
 ### Requirements
@@ -47,6 +37,25 @@ sudo cp target/release/omado /usr/local/bin/
 - **Linux only** (built for Omarchy)
 - Rust 1.70+ (install from [rustup.rs](https://rustup.rs/))
 - Development packages: `libxcb`, `libxrandr`, `libxi`
+
+### Hyprland Setup
+
+When switching away from the workspace where OmaDo is open, Hyprland may show an "Application not responding" popup after a few seconds.
+
+#### Why this happens
+
+- Hyprland throttles or pauses windows that are off-screen
+- If an app isn't receiving frame updates, the compositor thinks it's frozen
+- OmaDo still works fine when you return — it's just a false alarm
+
+#### How to fix it
+
+Add this rule to your Hyprland config (`~/.config/hypr/windows.conf`):
+
+```
+# Keep OmaDo lightly rendering in the background to avoid ANR popups
+windowrulev2 = renderunfocused, title:^OmaDo$
+```
 
 ## Usage
 
@@ -167,21 +176,6 @@ cargo test
 - [shellexpand](https://github.com/netvl/shellexpand) - Shell path expansion
 - [notify](https://github.com/notify-rs/notify) - File watching
 - [anyhow](https://github.com/dtolnay/anyhow) - Error handling
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
-
-### Areas for Contribution
-
-- [ ] Add more keyboard shortcuts
-- [ ] Implement task due dates
-- [ ] Add task priorities
-- [ ] Create additional themes
-- [ ] Add task export formats
-- [ ] Add more Linux desktop environment integrations
-- [ ] Add configuration file support
-- [ ] Improve performance optimizations
 
 
 ## License
