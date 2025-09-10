@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use anyhow::Result;
 
-// Setup: cargo build --release && ./target/release/omarchy-todo
-// Hyprland rule: windowrule = opacity 0.9 0.9, class:^(omarchy-todo)
+// Setup: cargo build --release && ./target/release/omado
+// Hyprland rule: windowrule = opacity 0.9 0.9, class:^(omado)
 
 #[derive(Debug)]
 enum KeyAction {
