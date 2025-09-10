@@ -128,6 +128,14 @@ struct Theme {
     accent: egui::Color32,
     border: egui::Color32,
     done_color: egui::Color32,
+    // Additional colors from Alacritty theme for project coloring
+    red: Option<egui::Color32>,
+    green: Option<egui::Color32>,
+    yellow: Option<egui::Color32>,
+    blue: Option<egui::Color32>,
+    magenta: Option<egui::Color32>,
+    cyan: Option<egui::Color32>,
+    white: Option<egui::Color32>,
     font_family: Option<String>,
     font_size: Option<f32>,
 }
@@ -140,6 +148,14 @@ impl Default for Theme {
             accent: egui::Color32::from_rgb(116, 199, 236),
             border: egui::Color32::from_rgb(88, 91, 112),
             done_color: egui::Color32::from_rgb(166, 173, 200),
+            // Default Catppuccin-like colors for projects
+            red: Some(egui::Color32::from_rgb(243, 139, 168)),
+            green: Some(egui::Color32::from_rgb(166, 227, 161)),
+            yellow: Some(egui::Color32::from_rgb(249, 226, 175)),
+            blue: Some(egui::Color32::from_rgb(137, 180, 250)),
+            magenta: Some(egui::Color32::from_rgb(203, 166, 247)),
+            cyan: Some(egui::Color32::from_rgb(148, 226, 213)),
+            white: Some(egui::Color32::from_rgb(205, 214, 244)),
             font_family: None,
             font_size: None,
         }
@@ -276,20 +292,45 @@ impl TodoApp {
                         if let Some(blue) = normal.blue {
                             if let Ok(color) = Self::parse_hex_color(&blue) {
                                 self.theme.accent = color;
+                                self.theme.blue = Some(color);
                             }
                         }
                         if let Some(white) = normal.white {
                             if let Ok(color) = Self::parse_hex_color(&white) {
                                 self.theme.border = color;
+                                self.theme.white = Some(color);
                             }
                         }
                         if let Some(cyan) = normal.cyan {
                             if let Ok(color) = Self::parse_hex_color(&cyan) {
                                 self.theme.done_color = color;
+                                self.theme.cyan = Some(color);
                             }
                         } else if let Some(black) = normal.black {
                             if let Ok(color) = Self::parse_hex_color(&black) {
                                 self.theme.done_color = color;
+                            }
+                        }
+                        
+                        // Load additional colors for project names
+                        if let Some(red) = normal.red {
+                            if let Ok(color) = Self::parse_hex_color(&red) {
+                                self.theme.red = Some(color);
+                            }
+                        }
+                        if let Some(green) = normal.green {
+                            if let Ok(color) = Self::parse_hex_color(&green) {
+                                self.theme.green = Some(color);
+                            }
+                        }
+                        if let Some(yellow) = normal.yellow {
+                            if let Ok(color) = Self::parse_hex_color(&yellow) {
+                                self.theme.yellow = Some(color);
+                            }
+                        }
+                        if let Some(magenta) = normal.magenta {
+                            if let Ok(color) = Self::parse_hex_color(&magenta) {
+                                self.theme.magenta = Some(color);
                             }
                         }
                     }
@@ -430,22 +471,55 @@ impl TodoApp {
     }
     
     fn get_project_color(&self, project: &str) -> egui::Color32 {
-        // Use highly contrasting, vibrant colors that clearly distinguish from task text
-        // These colors are chosen to be visually distinct and readable on both light and dark themes
-        let project_colors = [
-            egui::Color32::from_rgb(255, 100, 100), // Bright red
-            egui::Color32::from_rgb(100, 255, 100), // Bright green
-            egui::Color32::from_rgb(100, 150, 255), // Bright blue
-            egui::Color32::from_rgb(255, 200, 100), // Bright orange
-            egui::Color32::from_rgb(255, 100, 255), // Bright magenta
-            egui::Color32::from_rgb(100, 255, 255), // Bright cyan
-            egui::Color32::from_rgb(255, 255, 100), // Bright yellow
-            egui::Color32::from_rgb(200, 100, 255), // Bright purple
-            egui::Color32::from_rgb(255, 150, 150), // Light coral
-            egui::Color32::from_rgb(150, 255, 200), // Light mint
-            egui::Color32::from_rgb(150, 200, 255), // Light sky blue
-            egui::Color32::from_rgb(255, 200, 150), // Light peach
-        ];
+        // Use the most contrasting colors from the current theme
+        // Prioritize accent and bright colors that contrast well with foreground text
+        let mut project_colors = Vec::new();
+        
+        // Always include accent color as it's designed to stand out
+        project_colors.push(self.theme.accent);
+        
+        // Add theme colors that contrast well with foreground text
+        if let Some(red) = self.theme.red {
+            project_colors.push(red);
+        }
+        if let Some(green) = self.theme.green {
+            project_colors.push(green);
+        }
+        if let Some(yellow) = self.theme.yellow {
+            project_colors.push(yellow);
+        }
+        if let Some(blue) = self.theme.blue {
+            // Only add blue if it's different from accent (since accent often uses blue)
+            if blue != self.theme.accent {
+                project_colors.push(blue);
+            }
+        }
+        if let Some(magenta) = self.theme.magenta {
+            project_colors.push(magenta);
+        }
+        if let Some(cyan) = self.theme.cyan {
+            // Only add cyan if it's different from done_color
+            if cyan != self.theme.done_color {
+                project_colors.push(cyan);
+            }
+        }
+        
+        // If we don't have enough colors, create brighter variants of existing ones
+        if project_colors.len() < 4 {
+            let brightened_accent = egui::Color32::from_rgb(
+                (self.theme.accent.r() as u16 * 120 / 100).min(255) as u8,
+                (self.theme.accent.g() as u16 * 120 / 100).min(255) as u8,
+                (self.theme.accent.b() as u16 * 120 / 100).min(255) as u8,
+            );
+            project_colors.push(brightened_accent);
+            
+            let brightened_border = egui::Color32::from_rgb(
+                (self.theme.border.r() as u16 * 140 / 100).min(255) as u8,
+                (self.theme.border.g() as u16 * 140 / 100).min(255) as u8,
+                (self.theme.border.b() as u16 * 140 / 100).min(255) as u8,
+            );
+            project_colors.push(brightened_border);
+        }
         
         // Simple hash function to consistently map project names to colors
         let mut hash: u32 = 0;

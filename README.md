@@ -2,7 +2,17 @@
 
 A fast, minimal todo application built specifically for Omarchy. Both GUI and CLI interfaces. Built with Rust and egui, featuring project organization, theme integration, and a clean aesthetic.
 
-![OmaDo Screenshot](screenshot.png) <!-- You can add a screenshot later -->
+<table>
+  <tr>
+    <td><img src="./assets/screenshot_omado_catppuccin.png" alt="Catppuccin Theme" width="400"/></td>
+    <td><img src="./assets/screenshot_omado_jade.png" alt="Jade Theme" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="./assets/screenshot_omado_mars.png" alt="Mars Theme" width="400"/></td>
+    <td><img src="./assets/screenshot_omado_matteblack.png" alt="Matte Black Theme" width="400"/></td>
+  </tr>
+</table>
+
 
 ## Features
 
