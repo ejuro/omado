@@ -430,40 +430,22 @@ impl TodoApp {
     }
     
     fn get_project_color(&self, project: &str) -> egui::Color32 {
-        // Generate variations of theme colors for different projects
-        // Exclude accent color to avoid conflicts with selection highlighting
-        let base_colors = [
-            self.theme.foreground.gamma_multiply(0.9),
-            self.theme.border.gamma_multiply(1.2),
-            self.theme.done_color,
-            egui::Color32::from_rgb(150, 150, 255), // Light blue
-            egui::Color32::from_rgb(255, 150, 150), // Light red  
-            egui::Color32::from_rgb(150, 255, 150), // Light green
-            egui::Color32::from_rgb(255, 255, 150), // Light yellow
-            egui::Color32::from_rgb(255, 150, 255), // Light magenta
+        // Use highly contrasting, vibrant colors that clearly distinguish from task text
+        // These colors are chosen to be visually distinct and readable on both light and dark themes
+        let project_colors = [
+            egui::Color32::from_rgb(255, 100, 100), // Bright red
+            egui::Color32::from_rgb(100, 255, 100), // Bright green
+            egui::Color32::from_rgb(100, 150, 255), // Bright blue
+            egui::Color32::from_rgb(255, 200, 100), // Bright orange
+            egui::Color32::from_rgb(255, 100, 255), // Bright magenta
+            egui::Color32::from_rgb(100, 255, 255), // Bright cyan
+            egui::Color32::from_rgb(255, 255, 100), // Bright yellow
+            egui::Color32::from_rgb(200, 100, 255), // Bright purple
+            egui::Color32::from_rgb(255, 150, 150), // Light coral
+            egui::Color32::from_rgb(150, 255, 200), // Light mint
+            egui::Color32::from_rgb(150, 200, 255), // Light sky blue
+            egui::Color32::from_rgb(255, 200, 150), // Light peach
         ];
-        
-        // Create additional variations by adjusting hue and saturation
-        let mut project_colors = Vec::new();
-        for &base_color in &base_colors {
-            project_colors.push(base_color);
-            
-            // Create lighter variant
-            let lighter = egui::Color32::from_rgb(
-                ((base_color.r() as u16 + 50).min(255)) as u8,
-                ((base_color.g() as u16 + 50).min(255)) as u8,
-                ((base_color.b() as u16 + 50).min(255)) as u8,
-            );
-            project_colors.push(lighter);
-            
-            // Create darker variant
-            let darker = egui::Color32::from_rgb(
-                base_color.r().saturating_sub(30),
-                base_color.g().saturating_sub(30),
-                base_color.b().saturating_sub(30),
-            );
-            project_colors.push(darker);
-        }
         
         // Simple hash function to consistently map project names to colors
         let mut hash: u32 = 0;
@@ -1018,7 +1000,20 @@ impl TodoApp {
 }
 
 impl eframe::App for TodoApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        // Enforce minimum window size at runtime
+        ctx.input(|i| {
+            if let Some(rect) = i.viewport().inner_rect {
+                let current_size = rect.size();
+                if current_size.x < 480.0 || current_size.y < 300.0 {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                        current_size.x.max(480.0),
+                        current_size.y.max(300.0),
+                    )));
+                }
+            }
+        });
+        
         // Hot-reload theme less frequently to avoid blocking
         if self.last_theme_check.elapsed() > Duration::from_millis(500) {
             let old_bg = self.theme.background;
@@ -1303,6 +1298,7 @@ fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([520.0, 640.0])
+            .with_min_inner_size([480.0, 300.0]) // Minimum width to fit ASCII art + padding
             .with_decorations(false)
             .with_resizable(true)
             .with_title("omado")
