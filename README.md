@@ -166,6 +166,7 @@ Colors update automatically when you change your terminal theme (with a short de
 - [toml](https://github.com/toml-rs/toml) - TOML parsing for themes
 - [shellexpand](https://github.com/netvl/shellexpand) - Shell path expansion
 - [anyhow](https://github.com/dtolnay/anyhow) - Error handling
+- [libc](https://github.com/rust-lang/libc) - Low-level system calls for process forking
 
 
 ## License
