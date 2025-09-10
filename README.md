@@ -1,6 +1,6 @@
 # OmaDo
 
-A fast, minimal todo application with both GUI and CLI interfaces. Built with Rust and egui, featuring project organization, theme integration, and a clean aesthetic.
+A fast, minimal todo application built specifically for Omarchy. Both GUI and CLI interfaces. Built with Rust and egui, featuring project organization, theme integration, and a clean aesthetic.
 
 ![OmaDo Screenshot](screenshot.png) <!-- You can add a screenshot later -->
 
@@ -110,7 +110,6 @@ Tasks can be organized into projects using the `project:` syntax:
 Tasks are stored in a plain text file at:
 
 - **Linux/macOS**: `~/.local/share/omado/todo.txt`
-- **Windows**: `%LOCALAPPDATA%\omado\todo.txt`
 
 The format is compatible with standard todo.txt syntax:
 
@@ -179,8 +178,10 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 - [ ] Add task priorities
 - [ ] Create additional themes
 - [ ] Add task export formats
-- [ ] Improve Windows/macOS support
+- [ ] Add more Linux desktop environment integrations
 - [ ] Add configuration file support
+- [ ] Improve performance optimizations
+
 
 ## License
 
@@ -195,4 +196,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Alacritty theme integration
 - Keyboard-driven navigation
 - Real-time theme updates
-- Cross-platform file storage

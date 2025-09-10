@@ -176,7 +176,16 @@ impl TodoApp {
     }
     
     pub fn get_storage_path() -> PathBuf {
-        let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+        // Use XDG_DATA_HOME or fallback to ~/.local/share for Linux
+        let data_dir = std::env::var("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                let mut home = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string()));
+                home.push(".local/share");
+                home
+            });
+        
+        let mut path = data_dir;
         path.push("omado");
         if let Err(_) = fs::create_dir_all(&path) {
             path = PathBuf::from(".");
@@ -186,7 +195,18 @@ impl TodoApp {
     }
     
     fn get_alacritty_config_path() -> Option<PathBuf> {
-        let mut path = dirs::config_dir()?;
+        // Use XDG_CONFIG_HOME or fallback to ~/.config for Linux
+        let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
+            PathBuf::from(xdg_config)
+        } else if let Ok(home) = std::env::var("HOME") {
+            let mut path = PathBuf::from(home);
+            path.push(".config");
+            path
+        } else {
+            return None;
+        };
+        
+        let mut path = config_dir;
         path.push("alacritty");
         path.push("alacritty.toml");
         if path.exists() { Some(path) } else { None }
