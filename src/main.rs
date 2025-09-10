@@ -173,7 +173,7 @@ impl TodoApp {
     
     pub fn get_storage_path() -> PathBuf {
         let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-        path.push("omarchy-todo");
+        path.push("omado");
         if let Err(_) = fs::create_dir_all(&path) {
             path = PathBuf::from(".");
         }
@@ -1144,13 +1144,13 @@ fn main() -> Result<(), eframe::Error> {
             .with_inner_size([520.0, 640.0])
             .with_decorations(false)
             .with_resizable(true)
-            .with_title("omarchy-todo")
-            .with_app_id("omarchy-todo"),
+            .with_title("omado")
+            .with_app_id("omado"),
         ..Default::default()
     };
     
     eframe::run_native(
-        "omarchy-todo",
+        "omado",
         options,
         Box::new(|_cc| Ok(Box::new(TodoApp::new()))),
     )
