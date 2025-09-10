@@ -23,6 +23,10 @@ enum KeyAction {
     CycleFilter,
     ClearSearch,
     ClearDelete,
+    OpenProjectPalette,
+    ToggleSearch,
+    CycleProject,
+    ClearAllFilters,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -30,6 +34,13 @@ enum Filter {
     All,
     Active,
     Done,
+}
+
+#[derive(Clone, PartialEq)]
+enum ProjectFilter {
+    All,
+    NoProject,
+    Project(String),
 }
 
 impl Filter {
@@ -54,6 +65,7 @@ impl Filter {
 struct Todo {
     text: String,
     done: bool,
+    project: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -115,6 +127,7 @@ struct TodoApp {
     todos: Vec<Todo>,
     selected: usize,
     filter: Filter,
+    project_filter: ProjectFilter,
     search: String,
     editing: Option<usize>,
     edit_text: String,
@@ -123,6 +136,10 @@ struct TodoApp {
     config_path: Option<PathBuf>,
     storage_path: PathBuf,
     delete_mode: bool,
+    show_project_palette: bool,
+    project_palette_search: String,
+    project_palette_selected: usize,
+    show_search: bool,
 }
 
 impl TodoApp {
@@ -134,6 +151,7 @@ impl TodoApp {
             todos: Vec::new(),
             selected: 0,
             filter: Filter::All,
+            project_filter: ProjectFilter::All,
             search: String::new(),
             editing: None,
             edit_text: String::new(),
@@ -142,6 +160,10 @@ impl TodoApp {
             config_path,
             storage_path,
             delete_mode: false,
+            show_project_palette: false,
+            project_palette_search: String::new(),
+            project_palette_selected: 0,
+            show_search: false,
         };
         
         app.load_todos();
@@ -149,7 +171,7 @@ impl TodoApp {
         app
     }
     
-    fn get_storage_path() -> PathBuf {
+    pub fn get_storage_path() -> PathBuf {
         let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
         path.push("omarchy-todo");
         if let Err(_) = fs::create_dir_all(&path) {
@@ -167,6 +189,9 @@ impl TodoApp {
     }
     
     fn load_theme(&mut self) {
+        // Reset to default theme first to ensure clean state
+        self.theme = Theme::default();
+        
         if let Some(ref config_path) = self.config_path.clone() {
             self.load_theme_from_file(config_path);
         }
@@ -239,20 +264,35 @@ impl TodoApp {
         Ok(egui::Color32::from_rgb(r, g, b))
     }
     
+    pub fn parse_todo_text(text: &str) -> (String, Option<String>) {
+        if let Some(colon_pos) = text.find(':') {
+            let project_part = &text[..colon_pos].trim();
+            let task_part = &text[colon_pos + 1..].trim();
+            if !project_part.is_empty() && !task_part.is_empty() {
+                return (task_part.to_string(), Some(project_part.to_string()));
+            }
+        }
+        (text.to_string(), None)
+    }
+    
     fn load_todos(&mut self) {
         if let Ok(content) = fs::read_to_string(&self.storage_path) {
             self.todos.clear();
             for line in content.lines() {
                 let line = line.trim();
                 if line.starts_with("[ ] ") {
+                    let (text, project) = Self::parse_todo_text(&line[4..]);
                     self.todos.push(Todo {
-                        text: line[4..].to_string(),
+                        text,
                         done: false,
+                        project,
                     });
                 } else if line.starts_with("[x] ") {
+                    let (text, project) = Self::parse_todo_text(&line[4..]);
                     self.todos.push(Todo {
-                        text: line[4..].to_string(),
+                        text,
                         done: true,
+                        project,
                     });
                 }
             }
@@ -263,7 +303,12 @@ impl TodoApp {
         let mut content = String::new();
         for todo in &self.todos {
             let prefix = if todo.done { "[x]" } else { "[ ]" };
-            content.push_str(&format!("{} {}\n", prefix, todo.text));
+            let display_text = if let Some(ref project) = todo.project {
+                format!("{}: {}", project, todo.text)
+            } else {
+                todo.text.clone()
+            };
+            content.push_str(&format!("{} {}\n", prefix, display_text));
         }
         let _ = fs::write(&self.storage_path, content);
     }
@@ -279,15 +324,235 @@ impl TodoApp {
                     Filter::Done => todo.done,
                 };
                 
+                let matches_project = match &self.project_filter {
+                    ProjectFilter::All => true,
+                    ProjectFilter::NoProject => todo.project.is_none(),
+                    ProjectFilter::Project(project) => {
+                        todo.project.as_ref() == Some(project)
+                    },
+                };
+                
                 let matches_search = if self.search.is_empty() {
                     true
                 } else {
-                    todo.text.to_lowercase().contains(&self.search.to_lowercase())
+                    let search_lower = self.search.to_lowercase();
+                    todo.text.to_lowercase().contains(&search_lower) ||
+                    todo.project.as_ref().map_or(false, |p| p.to_lowercase().contains(&search_lower))
                 };
                 
-                matches_filter && matches_search
+                matches_filter && matches_project && matches_search
             })
             .collect()
+    }
+    
+    fn get_all_projects(&self) -> Vec<String> {
+        let mut projects: Vec<String> = self.todos
+            .iter()
+            .filter_map(|todo| todo.project.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        projects.sort();
+        projects
+    }
+    
+    fn get_project_task_count(&self, project: Option<&String>) -> (usize, usize) {
+        let todos_for_project: Vec<_> = self.todos
+            .iter()
+            .filter(|todo| {
+                match project {
+                    Some(p) => todo.project.as_ref() == Some(p),
+                    None => todo.project.is_none(),
+                }
+            })
+            .collect();
+        
+        let total = todos_for_project.len();
+        let active = todos_for_project.iter().filter(|todo| !todo.done).count();
+        (active, total)
+    }
+    
+    fn get_project_color(&self, project: &str) -> egui::Color32 {
+        // Generate variations of theme colors for different projects
+        let base_colors = [
+            self.theme.accent,
+            self.theme.accent.gamma_multiply(0.8),
+            self.theme.foreground.gamma_multiply(0.9),
+            self.theme.border,
+        ];
+        
+        // Create additional variations by adjusting hue and saturation
+        let mut project_colors = Vec::new();
+        for &base_color in &base_colors {
+            project_colors.push(base_color);
+            
+            // Create lighter variant
+            let lighter = egui::Color32::from_rgb(
+                ((base_color.r() as u16 + 50).min(255)) as u8,
+                ((base_color.g() as u16 + 50).min(255)) as u8,
+                ((base_color.b() as u16 + 50).min(255)) as u8,
+            );
+            project_colors.push(lighter);
+            
+            // Create darker variant
+            let darker = egui::Color32::from_rgb(
+                base_color.r().saturating_sub(30),
+                base_color.g().saturating_sub(30),
+                base_color.b().saturating_sub(30),
+            );
+            project_colors.push(darker);
+        }
+        
+        // Simple hash function to consistently map project names to colors
+        let mut hash: u32 = 0;
+        for byte in project.bytes() {
+            hash = hash.wrapping_mul(31).wrapping_add(byte as u32);
+        }
+        
+        let color_index = (hash as usize) % project_colors.len();
+        project_colors[color_index]
+    }
+    
+    fn render_project_palette(&mut self, ctx: &egui::Context) {
+        if !self.show_project_palette {
+            return;
+        }
+        
+        egui::Window::new("Project Palette")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.vertical(|ui| {
+                    ui.set_min_width(300.0);
+                    
+                    // Search input
+                    ui.horizontal(|ui| {
+                        ui.label("🔍");
+                        let response = ui.add(
+                            egui::TextEdit::singleline(&mut self.project_palette_search)
+                                .hint_text("Filter projects...")
+                                .desired_width(ui.available_width() - 30.0)
+                        );
+                        response.request_focus();
+                    });
+                    
+                    ui.separator();
+                    
+                    // Build list of project options
+                    let mut options = vec![("All".to_string(), None, self.todos.len())];
+                    
+                    let (_no_project_active, no_project_total) = self.get_project_task_count(None);
+                    options.push(("No project".to_string(), Some(None), no_project_total));
+                    
+                    let projects = self.get_all_projects();
+                    for project in projects {
+                        let (_active_count, total_count) = self.get_project_task_count(Some(&project));
+                        options.push((project.clone(), Some(Some(project)), total_count));
+                    }
+                    
+                    // Filter options based on search
+                    let filtered_options: Vec<_> = options
+                        .into_iter()
+                        .filter(|(name, _, _)| {
+                            if self.project_palette_search.is_empty() {
+                                true
+                            } else {
+                                name.to_lowercase().contains(&self.project_palette_search.to_lowercase())
+                            }
+                        })
+                        .collect();
+                    
+                    // Adjust selection if it's out of bounds
+                    if self.project_palette_selected >= filtered_options.len() {
+                        self.project_palette_selected = filtered_options.len().saturating_sub(1);
+                    }
+                    
+                    // Handle keyboard input
+                    ctx.input(|i| {
+                        for event in &i.events {
+                            if let egui::Event::Key { key, pressed: true, .. } = event {
+                                match key {
+                                    egui::Key::ArrowDown | egui::Key::J => {
+                                        if self.project_palette_selected < filtered_options.len().saturating_sub(1) {
+                                            self.project_palette_selected += 1;
+                                        }
+                                    }
+                                    egui::Key::ArrowUp | egui::Key::K => {
+                                        if self.project_palette_selected > 0 {
+                                            self.project_palette_selected -= 1;
+                                        }
+                                    }
+                                    egui::Key::Enter => {
+                                        if let Some((_, filter_option, _)) = filtered_options.get(self.project_palette_selected) {
+                                            match filter_option {
+                                                None => self.project_filter = ProjectFilter::All,
+                                                Some(None) => self.project_filter = ProjectFilter::NoProject,
+                                                Some(Some(project)) => self.project_filter = ProjectFilter::Project(project.clone()),
+                                            }
+                                            self.show_project_palette = false;
+                                            self.selected = 0;
+                                        }
+                                    }
+                                    egui::Key::Escape => {
+                                        self.show_project_palette = false;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    });
+                    
+                    // Render options
+                    egui::ScrollArea::vertical()
+                        .max_height(200.0)
+                        .show(ui, |ui| {
+                            for (i, (name, filter_option, _total_count)) in filtered_options.iter().enumerate() {
+                                let is_selected = i == self.project_palette_selected;
+                                let bg_color = if is_selected {
+                                    self.theme.accent.gamma_multiply(0.3)
+                                } else {
+                                    egui::Color32::TRANSPARENT
+                                };
+                                
+                                let frame = egui::Frame::none()
+                                    .fill(bg_color)
+                                    .inner_margin(egui::Margin::same(4.0));
+                                
+                                frame.show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label(if is_selected { "▶" } else { " " });
+                                        ui.label(name);
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            let active_count = match filter_option {
+                                                None => {
+                                                    let active = self.todos.iter().filter(|t| !t.done).count();
+                                                    active
+                                                },
+                                                Some(None) => {
+                                                    let (active, _) = self.get_project_task_count(None);
+                                                    active
+                                                },
+                                                Some(Some(project)) => {
+                                                    let (active, _) = self.get_project_task_count(Some(project));
+                                                    active
+                                                },
+                                            };
+                                            ui.label(format!("{} open", active_count));
+                                        });
+                                    });
+                                });
+                            }
+                        });
+                    
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("j/k: Move | Enter: Select | Esc: Cancel")
+                            .color(self.theme.done_color)
+                            .size(10.0));
+                    });
+                });
+            });
     }
     
     fn handle_keyboard(&mut self, ctx: &egui::Context) {
@@ -296,6 +561,12 @@ impl TodoApp {
         ctx.input(|i| {
             for event in &i.events {
                 if let egui::Event::Key { key, pressed: true, modifiers, .. } = event {
+                    // Skip main keyboard handling if project palette is open
+                    // Allow Escape key through even if search is open
+                    if self.show_project_palette || (self.show_search && !matches!(key, egui::Key::Escape)) {
+                        continue;
+                    }
+                    
                     if self.editing.is_some() {
                         match key {
                             egui::Key::Enter => actions.push(KeyAction::SaveEdit),
@@ -315,11 +586,27 @@ impl TodoApp {
                                 actions.push(KeyAction::GoToTop);
                             }
                         }
+                        egui::Key::P => {
+                            if modifiers.shift {
+                                actions.push(KeyAction::OpenProjectPalette);
+                            } else {
+                                actions.push(KeyAction::CycleProject);
+                            }
+                        }
+                        egui::Key::S => {
+                            if modifiers.shift {
+                                actions.push(KeyAction::ToggleSearch);
+                            } else {
+                                actions.push(KeyAction::ClearDelete);
+                            }
+                        }
                         egui::Key::Enter => actions.push(KeyAction::EditSelected),
                         egui::Key::A => actions.push(KeyAction::AddNew),
                         egui::Key::X => actions.push(KeyAction::ToggleSelected),
                         egui::Key::D => actions.push(KeyAction::DeleteKey),
                         egui::Key::F => actions.push(KeyAction::CycleFilter),
+                        egui::Key::C => actions.push(KeyAction::ClearAllFilters),
+                        egui::Key::Slash => {}, // Handle search focus separately to avoid conflicts
                         egui::Key::Escape => actions.push(KeyAction::ClearSearch),
                         _ => actions.push(KeyAction::ClearDelete),
                     }
@@ -337,12 +624,15 @@ impl TodoApp {
             KeyAction::SaveEdit => {
                 if let Some(idx) = self.editing {
                     if !self.edit_text.trim().is_empty() {
+                        let (text, project) = Self::parse_todo_text(self.edit_text.trim());
                         if idx < self.todos.len() {
-                            self.todos[idx].text = self.edit_text.trim().to_string();
+                            self.todos[idx].text = text;
+                            self.todos[idx].project = project;
                         } else {
                             self.todos.push(Todo {
-                                text: self.edit_text.trim().to_string(),
+                                text,
                                 done: false,
+                                project,
                             });
                         }
                         self.save_todos();
@@ -379,14 +669,22 @@ impl TodoApp {
                 let filtered = self.filtered_todos();
                 if let Some((real_idx, todo)) = filtered.get(self.selected) {
                     let real_idx = *real_idx;
-                    let text = todo.text.clone();
+                    let text = if let Some(ref project) = todo.project {
+                        format!("{}: {}", project, todo.text)
+                    } else {
+                        todo.text.clone()
+                    };
                     self.editing = Some(real_idx);
                     self.edit_text = text;
                 }
             }
             KeyAction::AddNew => {
                 self.editing = Some(self.todos.len());
-                self.edit_text.clear();
+                // Pre-fill with current project if one is selected
+                self.edit_text = match &self.project_filter {
+                    ProjectFilter::Project(project) => format!("{}: ", project),
+                    _ => String::new(),
+                };
             }
             KeyAction::ToggleSelected => {
                 let filtered = self.filtered_todos();
@@ -419,10 +717,60 @@ impl TodoApp {
             }
             KeyAction::ClearSearch => {
                 self.search.clear();
+                self.show_search = false;
                 self.selected = 0;
             }
             KeyAction::ClearDelete => {
                 self.delete_mode = false;
+            }
+            KeyAction::OpenProjectPalette => {
+                self.show_project_palette = true;
+                self.project_palette_search.clear();
+                self.project_palette_selected = 0;
+            }
+            KeyAction::ToggleSearch => {
+                self.show_search = !self.show_search;
+                if !self.show_search {
+                    self.search.clear();
+                    self.selected = 0;
+                }
+            }
+            KeyAction::CycleProject => {
+                let projects = self.get_all_projects();
+                match &self.project_filter {
+                    ProjectFilter::All => {
+                        self.project_filter = ProjectFilter::NoProject;
+                    }
+                    ProjectFilter::NoProject => {
+                        if let Some(first_project) = projects.first() {
+                            self.project_filter = ProjectFilter::Project(first_project.clone());
+                        } else {
+                            self.project_filter = ProjectFilter::All;
+                        }
+                    }
+                    ProjectFilter::Project(current) => {
+                        if let Some(current_idx) = projects.iter().position(|p| p == current) {
+                            let next_idx = current_idx + 1;
+                            if next_idx < projects.len() {
+                                self.project_filter = ProjectFilter::Project(projects[next_idx].clone());
+                            } else {
+                                // After the last project, go back to All
+                                self.project_filter = ProjectFilter::All;
+                            }
+                        } else {
+                            // Current project not found, go to All
+                            self.project_filter = ProjectFilter::All;
+                        }
+                    }
+                }
+                self.selected = 0;
+            }
+            KeyAction::ClearAllFilters => {
+                self.filter = Filter::All;
+                self.project_filter = ProjectFilter::All;
+                self.search.clear();
+                self.show_search = false;
+                self.selected = 0;
             }
         }
     }
@@ -482,6 +830,7 @@ impl TodoApp {
                     i,
                     *real_idx,
                     todo.text.clone(),
+                    todo.project.clone(),
                     todo.done,
                     i == self.selected,
                     self.editing == Some(*real_idx)
@@ -491,7 +840,7 @@ impl TodoApp {
             egui::ScrollArea::vertical()
                 .max_height(400.0)
                 .show(ui, |ui| {
-                    for (_i, _real_idx, text, done, is_selected, is_editing) in todo_data {
+                    for (_i, _real_idx, text, project, done, is_selected, is_editing) in todo_data {
                         ui.horizontal(|ui| {
                             let bg_color = if is_selected {
                                 self.theme.accent.gamma_multiply(0.3)
@@ -520,7 +869,6 @@ impl TodoApp {
                                     ui.horizontal(|ui| {
                                         let checkbox_text = if done { "[x]" } else { "[ ]" };
                                         let text_color = if done {
-                                            // Make completed text dimmer but still readable
                                             self.theme.done_color
                                         } else {
                                             self.theme.foreground
@@ -529,7 +877,15 @@ impl TodoApp {
                                         ui.label(egui::RichText::new(checkbox_text)
                                             .color(if done { self.theme.accent } else { self.theme.border })
                                             .monospace());
-                                            
+                                        
+                                        // Show project name with project-specific color if present
+                                        if let Some(ref proj) = project {
+                                            let project_color = self.get_project_color(proj);
+                                            ui.label(egui::RichText::new(format!("{}: ", proj))
+                                                .color(project_color)
+                                                .strong());
+                                        }
+                                        
                                         let display_text = if done {
                                             format!("~~{}~~", text)
                                         } else {
@@ -551,16 +907,26 @@ impl TodoApp {
 impl eframe::App for TodoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Hot-reload theme more frequently and force repaints
-        if self.last_theme_check.elapsed() > Duration::from_millis(500) {
+        if self.last_theme_check.elapsed() > Duration::from_millis(100) {
+            let old_bg = self.theme.background;
             self.load_theme();
+            let new_bg = self.theme.background;
+            
+            // Force repaint if theme actually changed
+            if old_bg != new_bg {
+                ctx.request_repaint();
+            }
+            
             self.last_theme_check = Instant::now();
-            ctx.request_repaint(); // Force immediate repaint
         }
         
         // Ensure continuous repaints for theme checking
-        ctx.request_repaint_after(Duration::from_millis(500));
+        ctx.request_repaint_after(Duration::from_millis(100));
         
         self.handle_keyboard(ctx);
+        
+        // Render project palette if open
+        self.render_project_palette(ctx);
         
         // Semi-transparent background
         let mut bg_color = self.theme.background;
@@ -576,19 +942,47 @@ impl eframe::App for TodoApp {
         ctx.set_style(style);
         
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(bg_color))
+            .frame(egui::Frame::none().fill(bg_color).inner_margin(16.0))
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 8.0;
                     
-                    // Header
+                    // Header with ASCII art and filters aligned at bottom
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("OMARCHY TODO")
-                            .color(self.theme.accent)
-                            .size(18.0)
-                            .strong());
+                        // ASCII art on the left
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::BOTTOM), |ui| {
+                            let ascii_art = vec![
+                                "  ██████  ███    ███  █████  ██████   ██████ ",
+                                " ██    ██ ████  ████ ██   ██ ██   ██ ██    ██",
+                                " ██    ██ ██ ████ ██ ███████ ██   ██ ██    ██",
+                                " ██    ██ ██  ██  ██ ██   ██ ██   ██ ██    ██",
+                                "  ██████  ██      ██ ██   ██ ██████   ██████ ",
+                            ];
+                            
+                            ui.vertical(|ui| {
+                                for line in ascii_art {
+                                    ui.label(egui::RichText::new(line)
+                                        .color(self.theme.accent)
+                                        .size(8.0)
+                                        .monospace());
+                                }
+                            });
+                        });
                         
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Filter info on the right, bottom-aligned
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
+                            let project_name = match &self.project_filter {
+                                ProjectFilter::All => "All",
+                                ProjectFilter::NoProject => "No project",
+                                ProjectFilter::Project(name) => name,
+                            };
+                            
+                            ui.label(egui::RichText::new(format!("Project: {}", project_name))
+                                .color(self.theme.done_color)
+                                .size(12.0));
+                            ui.label(egui::RichText::new(" | ")
+                                .color(self.theme.border)
+                                .size(12.0));
                             ui.label(egui::RichText::new(format!("Filter: {}", self.filter.name()))
                                 .color(self.theme.done_color)
                                 .size(12.0));
@@ -597,23 +991,19 @@ impl eframe::App for TodoApp {
                     
                     ui.separator();
                     
-                    // Search bar
-                    ui.horizontal(|ui| {
-                        ui.label("🔍");
-                        let search_response = ui.add(
-                            egui::TextEdit::singleline(&mut self.search)
-                                .hint_text("Type to search... (/ to focus, Esc to clear)")
-                                .desired_width(ui.available_width() - 20.0)
-                        );
-                        
-                        ctx.input(|i| {
-                            if i.key_pressed(egui::Key::Slash) && self.editing.is_none() {
-                                search_response.request_focus();
-                            }
+                    // Conditional Search bar
+                    if self.show_search {
+                        ui.horizontal(|ui| {
+                            ui.label("🔍");
+                            let search_response = ui.add(
+                                egui::TextEdit::singleline(&mut self.search)
+                                    .hint_text("Type to search... (Esc to close)")
+                                    .desired_width(ui.available_width() - 20.0)
+                            );
+                            search_response.request_focus();
                         });
-                    });
-                    
-                    ui.separator();
+                        ui.separator();
+                    }
                     
                     // Todo list
                     self.render_todo_list(ui);
@@ -625,7 +1015,7 @@ impl eframe::App for TodoApp {
                         let help_text = if self.editing.is_some() {
                             "Enter: Save | Esc: Cancel"
                         } else {
-                            "j/k: Move | Enter: Edit | a: Add | x: Toggle | dd: Delete | f: Filter | /: Search"
+                            "j/k: Move | Enter: Edit | a: Add | x: Toggle | dd: Delete | f: Filter | p: Project | Shift+S: Search | Shift+P: Projects | c: Clear Filters"
                         };
                         
                         ui.label(egui::RichText::new(help_text)
@@ -645,7 +1035,110 @@ impl eframe::App for TodoApp {
     }
 }
 
+fn handle_cli_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    if args.len() < 2 {
+        return Ok(()); // No CLI args, run GUI
+    }
+    
+    match args[1].as_str() {
+        "add" => {
+            if args.len() < 3 {
+                eprintln!("Usage: omado add \"<task>\"");
+                std::process::exit(1);
+            }
+            
+            let task_text = args[2].clone();
+            let (text, project) = TodoApp::parse_todo_text(&task_text);
+            
+            let todo = Todo {
+                text,
+                project,
+                done: false,
+            };
+            
+            // Load existing todos
+            let storage_path = TodoApp::get_storage_path();
+            let mut todos = Vec::new();
+            
+            if let Ok(content) = fs::read_to_string(&storage_path) {
+                for line in content.lines() {
+                    let line = line.trim();
+                    if line.starts_with("[ ] ") {
+                        let (text, project) = TodoApp::parse_todo_text(&line[4..]);
+                        todos.push(Todo {
+                            text,
+                            done: false,
+                            project,
+                        });
+                    } else if line.starts_with("[x] ") {
+                        let (text, project) = TodoApp::parse_todo_text(&line[4..]);
+                        todos.push(Todo {
+                            text,
+                            done: true,
+                            project,
+                        });
+                    }
+                }
+            }
+            
+            // Add new todo
+            todos.push(todo.clone());
+            
+            // Save todos
+            let mut content = String::new();
+            for todo in &todos {
+                let prefix = if todo.done { "[x]" } else { "[ ]" };
+                let display_text = if let Some(ref project) = todo.project {
+                    format!("{}: {}", project, todo.text)
+                } else {
+                    todo.text.clone()
+                };
+                content.push_str(&format!("{} {}\n", prefix, display_text));
+            }
+            fs::write(&storage_path, content)?;
+            
+            // Confirmation message
+            if let Some(ref project) = todo.project {
+                println!("✓ Added task to project '{}': {}", project, todo.text);
+            } else {
+                println!("✓ Added task: {}", todo.text);
+            }
+            
+            std::process::exit(0);
+        }
+        "help" | "--help" | "-h" => {
+            println!("OmaDo - Simple todo management");
+            println!();
+            println!("USAGE:");
+            println!("    omado                    Launch GUI");
+            println!("    omado add \"<task>\"       Add a new task");
+            println!("    omado help               Show this help");
+            println!();
+            println!("EXAMPLES:");
+            println!("    omado add \"Buy groceries\"");
+            println!("    omado add \"work: Fix parser bug\"");
+            println!("    omado add \"personal: Call mom\"");
+            
+            std::process::exit(0);
+        }
+        _ => {
+            eprintln!("Unknown command: {}", args[1]);
+            eprintln!("Run 'omado help' for usage information.");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() -> Result<(), eframe::Error> {
+    let args: Vec<String> = std::env::args().collect();
+    
+    // Handle CLI commands
+    if let Err(e) = handle_cli_command(args) {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
+    
+    // Launch GUI if no CLI command was handled
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([520.0, 640.0])
