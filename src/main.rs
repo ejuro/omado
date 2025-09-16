@@ -1188,7 +1188,9 @@ impl eframe::App for TodoApp {
                             ui.add(
                                 egui::Label::new(
                                     egui::RichText::new(ascii_block)
-                                        .font(egui::FontId::monospace(8.0))
+                                        .size(8.0)
+                                        .monospace()
+                                        .color(self.theme.accent)
                                 ).wrap()
                             );
                         });
