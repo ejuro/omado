@@ -1175,21 +1175,22 @@ impl eframe::App for TodoApp {
                         // ASCII art on the left
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::BOTTOM), |ui| {
                             let ascii_art = vec![
-                                "  ██████  ███    ███  █████  ██████   ██████ ",
-                                " ██    ██ ████  ████ ██   ██ ██   ██ ██    ██",
-                                " ██    ██ ██ ████ ██ ███████ ██   ██ ██    ██",
-                                " ██    ██ ██  ██  ██ ██   ██ ██   ██ ██    ██",
-                                "  ██████  ██      ██ ██   ██ ██████   ██████ ",
+                                "  ▄██████▄    ▄▄▄▄███▄▄▄▄      ▄████████ ████████▄   ▄██████▄ ",
+                                " ███    ███ ▄██▀▀▀███▀▀▀██▄   ███    ███ ███   ▀███ ███    ███",
+                                " ███    ███ ███   ███   ███   ███    ███ ███    ███ ███    ███",
+                                " ███    ███ ███   ███   ███   ███    ███ ███    ███ ███    ███",
+                                " ███    ███ ███   ███   ███ ▀███████████ ███    ███ ███    ███",
+                                " ███    ███ ███   ███   ███   ███    ███ ███    ███ ███    ███",
+                                " ███    ███ ███   ███   ███   ███    ███ ███   ▄███ ███    ███",
+                                "  ▀██████▀   ▀█   ███   █▀    ███    █▀  ████████▀   ▀██████▀ ",
                             ];
-                            
-                            ui.vertical(|ui| {
-                                for line in ascii_art {
-                                    ui.label(egui::RichText::new(line)
-                                        .color(self.theme.accent)
-                                        .size(8.0)
-                                        .monospace());
-                                }
-                            });
+                            let ascii_block = ascii_art.join("\n");
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(ascii_block)
+                                        .font(egui::FontId::monospace(8.0))
+                                ).wrap()
+                            );
                         });
                         
                         // Filter info on the right, bottom-aligned
